@@ -31,7 +31,7 @@ mode = 'Rusanov'; % 'Rusanov', 'Jameson', 'FVS-order-1', 'FVS-order-2'
 
 
 % Discretization
-nx = 1000;
+nx = 400;
 nt = 1000;
 
 % Intermediate variables
@@ -54,34 +54,6 @@ end
 
 t = 0;
 for i = 0 : nt
-    t = nt * t_step;
-    lambda_max = evaluate_lambda_max(U, gamma);
-    lambda_begin = evaluate_lambda_max(U_begin, gamma);
-    lambda_end = evaluate_lambda_max(U_end, gamma);
-    
-    F = evaluate_f(U, gamma);
-    F_begin = evaluate_f(U_begin, gamma);
-    F_end = evaluate_f(U_end, gamma);
-    
-    % Rusanov
-    lambda_positive = 0.5 * (lambda_max + circshift(lambda_max, [0,-1])); % 1 x 101
-    lambda_positive(end) = 0.5 * (lambda_max(end) + lambda_end);
-    lambda_negative = 0.5 * (lambda_max + circshift(lambda_max, [0, 1])); % 1 x 101
-    lambda_negative(1) = 0.5 * (lambda_max(1) + lambda_begin);
-    
-    
-    F_positive = 0.5 * (circshift(F, [0, -1]) + F)...
-        -  0.5 * lambda_positive .* (circshift(U, [0, -1]) - U);
-    F_positive(:, end) = 0.5 * (F_end + F(:, end))...
-        -  0.5 * lambda_positive(:, end) .* (U_end - U(:, end));
-    F_negative = 0.5 * (circshift(F, [0, 1]) + F)...
-        -  0.5 * lambda_negative .* (U - circshift(U, [0, 1]));
-    F_negative(:, 1) = 0.5 * (F_begin + F(:, 1))...
-        -  0.5 * lambda_negative(:, 1) .* (U(:, 1) - U_begin);
-    
-    % time: forward diff
-    U = U - t_step / x_step * (F_positive - F_negative);
-    
     rho = U(1, :);
     m = U(2, :);
     epsilon = U(3, :);
@@ -89,15 +61,105 @@ for i = 0 : nt
     u = m ./ rho;
     E = epsilon ./ rho;
     p = (rho .* E - 0.5 * rho .* u.^2) * (gamma - 1);
+
+    p_begin = (U_begin(3,:) - 0.5 * U_begin(2,:) .^2 ./ U_begin(1,:) )...
+        * (gamma - 1);
+    p_end = (U_end(3,:) - 0.5 * U_end(2,:).^2 ./ U_end(1,:) )...
+        * (gamma - 1);
     
+    p_p1 = circshift(p, [0,-1]); p_p1(:, end) = p_end;
+    p_m1 = circshift(p, [0, 1]); p_m1(:, 1) = p_begin;
+    
+    t = i * t_step;
+    
+    lambda_max = evaluate_lambda_max(U, gamma);
+    lambda_begin = evaluate_lambda_max(U_begin, gamma);
+    lambda_end = evaluate_lambda_max(U_end, gamma);
+    
+    lambda_p1 = circshift(lambda_max, [0,-1]); lambda_p1(end) = lambda_end;
+    lambda_m1 = circshift(lambda_max, [0,1]); lambda_m1(1) = lambda_begin;
+    
+    
+    F = evaluate_f(U, gamma);
+    F_begin = evaluate_f(U_begin, gamma);
+    F_end = evaluate_f(U_end, gamma);
+    
+    F_p1 = circshift(F, [0,-1]); F_p1(:, end) = F_end;
+    F_m1 = circshift(F, [0,1]); F_m1(:, 1) = F_begin;
+    
+    U_p1 = circshift(U, [0,-1]); U_p1(:, end) = U_end;
+    U_p2 = circshift(U, [0,-2]); U_p2(:, end) = U_end; U_p2(:, end-1) = U_end;
+    
+    U_m1 = circshift(U, [0,1]); U_m1(:, 1) = U_begin;
+    U_m2 = circshift(U, [0,2]); U_m2(:, 1) = U_begin; U_m2(:, 2) = U_begin;
+    
+    if strcmp(mode, 'Rusanov')
+        lambda_positive = 0.5 * (lambda_max + lambda_p1); % 1 x 101
+        lambda_negative = 0.5 * (lambda_max + lambda_m1); % 1 x 101
+    
+    
+        F_positive = 0.5 * (F_p1 + F)...
+            -  0.5 * lambda_positive .* (U_p1 - U);
+        F_negative = 0.5 * (F_m1 + F)...
+            -  0.5 * lambda_negative .* (U - U_m1);
+    
+        % time: forward diff
+        U = U - t_step / x_step * (F_positive - F_negative);
+    elseif strcmp(mode, 'Jameson')
+        lambda_positive = 0.5 * (lambda_max + lambda_p1); % 1 x 101
+        lambda_negative = 0.5 * (lambda_max + lambda_m1); % 1 x 101
+        
+        nu = abs(p_p1 - 2 * p + p_m1) ./ abs(p_p1 + 2 * p + p_m1);
+        nu_begin = abs(p(1) - p_begin) ./ abs(p(1) + 3 * p_begin);
+        nu_end = abs(p(end) - p_end) ./ abs(3 * p_end + p(end - 1));
+        
+        nu_p2 = circshift(nu, [0,-2]); nu_p2(end) = 0;
+        nu_p2(end-1) = nu_end;
+        nu_p1 = circshift(nu, [0,-1]); nu_p1(end) = nu_end;
+        
+        nu_m1 = circshift(nu, [0,1]); nu_m1(1) = nu_begin;
+        nu_m2 = circshift(nu, [0,2]); nu_m2(1) = 0;
+        nu_m2(2) = nu_begin;
+        
+        e2_positive = 4.1 * max([nu_p2;nu_p1;nu;nu_m1]);
+        %e2_positive = 0.5 * ones(1, nx + 1);
+        e4_positive = max([zeros(1,nx+1);
+        1 / 64.0 * ones(1,nx+1) - e2_positive]);
+    
+        e2_negative = 4.1 * max([nu_p1;nu;nu_m1;nu_m2]);
+        %e2_positive = 0.5 * ones(1, nx+1);
+        e4_negative = max([zeros(1,nx+1);
+        1 / 64.0 * ones(1,nx+1) - e2_negative]);
+        
+        F_positive = 0.5 * (F_p1 + F) - lambda_positive .* e2_positive .* (U_p1 - U)...
+            + lambda_positive .* e4_positive .* (U_p2 - 3 * U_p1 + 3 * U - U_m1);
+        F_negative = 0.5 * (F_m1 + F) - lambda_negative .* e2_negative .* (U - U_m1)...
+            + lambda_negative .* e4_negative .* (U_p1 - 3 * U + 3 * U_m1 - U_m2);
+        
+        % time: forward diff
+        U = U - t_step / x_step * (F_positive - F_negative);        
+    end
+   
     x = -0.5:x_step:0.5;
+    
+    
+    % draw figure
     cla;
     plot(x, rho);
     hold on
     plot(x, u);
     hold on
     plot(x, p);
-    hold on
-    pause(0.01);
+    hold on   
+%     plot(x, e2_positive);
+%     hold on
+%     plot(x, e2_negative);
+%     hold on
+%     legend('\rho', 'u', 'p', 'e+', 'e-');
+    legend('\rho', 'u', 'p');
+    title_str = sprintf('Shock Tube, mode = %s, nx = %d, nt = %d, t = %f s', mode, nx, nt, t);
+    title(title_str);
+    axis([-0.5, 0.5, 0.0, 2.0]);
+    pause(t_step * 0.01);
 end
 
