@@ -31,8 +31,8 @@ mode = 'FVS-order-2'; % 'Rusanov', 'Jameson', 'FVS-order-1', 'FVS-order-2'
 
 
 % Discretization
-nx = 200;
-nt = 1000;
+nx = 400;
+nt = 2000;
 
 % Intermediate variables
 x_step = (x1 - x0) / nx;
