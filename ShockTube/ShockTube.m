@@ -27,11 +27,11 @@ x0 = -0.5;
 x1 = 0.5;
 t_end = 0.25;
 gamma = 1.4;
-mode = 'Rusanov'; % 'Rusanov', 'Jameson', 'FVS-order-1', 'FVS-order-2'
+mode = 'FVS-order-1'; % 'Rusanov', 'Jameson', 'FVS-order-1', 'FVS-order-2'
 
 
 % Discretization
-nx = 400;
+nx = 500;
 nt = 1000;
 
 % Intermediate variables
@@ -93,6 +93,8 @@ for i = 0 : nt
     U_m1 = circshift(U, [0,1]); U_m1(:, 1) = U_begin;
     U_m2 = circshift(U, [0,2]); U_m2(:, 1) = U_begin; U_m2(:, 2) = U_begin;
     
+    F_positive = zeros(3, nx+1);
+    F_negative = zeros(3, nx+1);
     if strcmp(mode, 'Rusanov')
         lambda_positive = 0.5 * (lambda_max + lambda_p1); % 1 x 101
         lambda_negative = 0.5 * (lambda_max + lambda_m1); % 1 x 101
@@ -137,7 +139,38 @@ for i = 0 : nt
             + lambda_negative .* e4_negative .* (U_p1 - 3 * U + 3 * U_m1 - U_m2);
         
         % time: forward diff
+        U = U - t_step / x_step * (F_positive - F_negative);
+    elseif strcmp(mode, 'FVS-order-1')
+        A = evaluate_a(U, gamma);
+        A_begin = evaluate_a(U_begin, gamma);
+        A_end = evaluate_a(U_end, gamma);
+        
+        [A_positive, A_negative] = splitting_a(A);
+        
+        F_pos = zeros(3, nx+1);
+        F_neg = zeros(3, nx+1);
+        
+        for j = 1 : nx+1
+            F_pos(:, j) = A_positive(:, :, j) * U(:, j);
+            F_neg(:, j) = A_negative(:, :, j) * U(:, j);
+        end
+        
+        [A_positive_begin, A_negative_begin] = splitting_a(A_begin);
+        [A_positive_end, A_negative_end] = splitting_a(A_end);
+        
+        F_pos_m1 = circshift(F_pos, [0, 1]); 
+        F_pos_m1(:, 1) = A_positive_begin * U_begin;
+        
+        F_neg_p1 = circshift(F_neg, [0, -1]);
+        F_neg_p1(:, end) = A_negative_end * U_end;
+        
+        F_positive = F_pos + F_neg_p1;
+        F_negative = F_neg + F_pos_m1;
+        
+        % time: forward diff
         U = U - t_step / x_step * (F_positive - F_negative);        
+    elseif strcmp(mode, 'FVS-order-2')
+        
     end
    
     x = -0.5:x_step:0.5;
