@@ -231,7 +231,8 @@ for i = 0 : nt
         
         for j = 1 : nx + 1
             U_positive_L(:, j) = U(:,j)...
-                + 0.5 * L_positive(:, :, j)^-1 * D_positive_L(:,j);
+                + 0.5 * L_positive(:, :, j)^-1 * D_positive_L(:, j);
+            
             U_positive_R(:, j) = U_p1(:, j)...
                 - 0.5 * L_positive(:, :, j)^-1 * D_positive_R(:, j);
             U_negative_L(:, j) = U_m1(:, j)...
@@ -239,8 +240,11 @@ for i = 0 : nt
             U_negative_R(:, j) = U(:, j)...
                 - 0.5 * L_negative(:, :, j)^-1 * D_negative_R(:, j);
         end
-        F_positive = finite_volume_flux(U_positive_L, U_positive_R, abs_eig(A_positive), gamma);
-        F_negative = finite_volume_flux(U_negative_L, U_negative_R, abs_eig(A_negative), gamma);
+        
+        F_positive = finite_volume_flux(U_positive_L, U_positive_R,...
+            abs_eig(A_positive), gamma);
+        F_negative = finite_volume_flux(U_negative_L, U_negative_R,...
+            abs_eig(A_negative), gamma);
     end
     
     % time: forward diff

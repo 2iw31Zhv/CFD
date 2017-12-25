@@ -4,8 +4,8 @@ function slope = min_mod(L, U_m1, U, U_p1)
 
 slope = zeros(3, length);
 for i = 1 : length
-    eigen_vec_left = L(:, :, i) * (U_p1 - U);
-    eigen_vec_right = L(:, :, i) * (U - U_m1);
+    eigen_vec_left = L(:, :, i) * (U_p1(:, i) - U(:, i));
+    eigen_vec_right = L(:, :, i) * (U(:, i) - U_m1(:, i));
     for j = 1 : 3
         a = eigen_vec_left(j);
         b = eigen_vec_right(j);
