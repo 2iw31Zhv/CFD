@@ -27,7 +27,7 @@ x0 = -0.5;
 x1 = 0.5;
 t_end = 0.25;
 gamma = 1.4;
-mode = 'Roe-order-1';
+mode = 'FVD-order-2';
 % The following modes are supported:
 % 'Rusanov', 'Jameson', 'FVS-order-1', 'FVS-order-2'
 % 'Roe-order-1', 'FVD-order-2'
@@ -206,16 +206,41 @@ for i = 0 : nt
         A_positive = evaluate_a(U_positive, gamma);
         A_negative = evaluate_a(U_negative, gamma);
         
-        for j = 1 : nx + 1
-            F_positive(:, j) = 0.5 * (evaluate_f(U(:, j), gamma)...
-                + evaluate_f(U_p1(:, j), gamma))...
-                - 0.5 * abs_eig(A_positive(:,:, j)) * (U_p1(:, j) - U(:, j));
-            F_negative(:, j) = 0.5 * (evaluate_f(U_m1(:, j), gamma)...
-                + evaluate_f(U(:, j), gamma))...
-                - 0.5 * abs_eig(A_negative(:,:, j)) * (U(:, j) - U_m1(:, j));
-        end
-    elseif strcmp(mode, 'FVD-order-2')
+        F_positive = finite_volume_flux(U, U_p1, abs_eig(A_positive), gamma);
+        F_negative = finite_volume_flux(U_m1, U, abs_eig(A_negative), gamma);
         
+    elseif strcmp(mode, 'FVD-order-2')
+        U_positive = roe_average(U, U_p1);
+        U_negative = roe_average(U_m1, U);
+        A_positive = evaluate_a(U_positive, gamma);
+        A_negative = evaluate_a(U_negative, gamma);
+        
+        [abs_A_positive, L_positive] = abs_eig(A_positive);
+        [abs_A_negative, L_negative] = abs_eig(A_negative);
+        
+        D_positive_L = min_mod(L_positive, U_m1, U, U_p1);
+        D_positive_R = min_mod(L_positive, U, U_p1, U_p2);
+        
+        D_negative_L = min_mod(L_negative, U_m2, U_m1, U);
+        D_negative_R = min_mod(L_negative, U_m1, U, U_p1);
+        
+        U_positive_L = zeros(3, nx+1);
+        U_positive_R = zeros(3, nx+1);
+        U_negative_L = zeros(3, nx+1);
+        U_negative_R = zeros(3, nx+1);
+        
+        for j = 1 : nx + 1
+            U_positive_L(:, j) = U(:,j)...
+                + 0.5 * L_positive(:, :, j)^-1 * D_positive_L(:,j);
+            U_positive_R(:, j) = U_p1(:, j)...
+                - 0.5 * L_positive(:, :, j)^-1 * D_positive_R(:, j);
+            U_negative_L(:, j) = U_m1(:, j)...
+                + 0.5 * L_negative(:, :, j)^-1 * D_negative_L(:, j);
+            U_negative_R(:, j) = U(:, j)...
+                - 0.5 * L_negative(:, :, j)^-1 * D_negative_R(:, j);
+        end
+        F_positive = finite_volume_flux(U_positive_L, U_positive_R, abs_eig(A_positive), gamma);
+        F_negative = finite_volume_flux(U_negative_L, U_negative_R, abs_eig(A_negative), gamma);
     end
     
     % time: forward diff
