@@ -2,7 +2,7 @@
 % Shock Tube
 % Author: Ziwei Zhu
 % Email: ziweizhu95@gmail.com
-% Date: 20171206
+% Date: 20171225
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % One-Dimensional Euler Equation
@@ -14,7 +14,7 @@
 % D/Dt [  m  ] + D/Dx [ f2 ] = 0
 %      epsilon          f3
 % where:
-% m = rho E 
+% m = rho u 
 % epsilon = rho E
 % f1 = m
 % f2 = m^2 / rho + (gamma - 1) (epsilon - m^2 / 2 / rho)
@@ -27,8 +27,10 @@ x0 = -0.5;
 x1 = 0.5;
 t_end = 0.25;
 gamma = 1.4;
-mode = 'FVS-order-2'; % 'Rusanov', 'Jameson', 'FVS-order-1', 'FVS-order-2'
-
+mode = 'Roe-order-1';
+% The following modes are supported:
+% 'Rusanov', 'Jameson', 'FVS-order-1', 'FVS-order-2'
+% 'Roe-order-1', 'FVD-order-2'
 
 % Discretization
 nx = 400;
@@ -198,6 +200,22 @@ for i = 0 : nt
             + (1.5 * F_neg_p1 - 0.5 * F_neg_p2);
         F_negative = (1.5 * F_pos_m1 - 0.5 * F_pos_m2)...
             + (1.5 * F_neg - 0.5 * F_neg_p1);
+    elseif strcmp(mode, 'Roe-order-1')
+        U_positive = roe_average(U, U_p1);
+        U_negative = roe_average(U_m1, U);
+        A_positive = evaluate_a(U_positive, gamma);
+        A_negative = evaluate_a(U_negative, gamma);
+        
+        for j = 1 : nx + 1
+            F_positive(:, j) = 0.5 * (evaluate_f(U(:, j), gamma)...
+                + evaluate_f(U_p1(:, j), gamma))...
+                - 0.5 * abs_eig(A_positive(:,:, j)) * (U_p1(:, j) - U(:, j));
+            F_negative(:, j) = 0.5 * (evaluate_f(U_m1(:, j), gamma)...
+                + evaluate_f(U(:, j), gamma))...
+                - 0.5 * abs_eig(A_negative(:,:, j)) * (U(:, j) - U_m1(:, j));
+        end
+    elseif strcmp(mode, 'FVD-order-2')
+        
     end
     
     % time: forward diff
